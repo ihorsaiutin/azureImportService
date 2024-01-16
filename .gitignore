@@ -4,6 +4,7 @@ csx
 .vs
 edge
 Publish
+.vscode
 
 *.user
 *.suo
@@ -24,6 +25,8 @@ local.settings.json
 
 node_modules
 dist
+.terraform
+terraform.tfstate*
 
 # Local python packages
 .python_packages/

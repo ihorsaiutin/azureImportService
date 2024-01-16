@@ -1,5 +1,5 @@
 {
-  "name": "",
+  "name": "fa-import-service-test",
   "version": "1.0.0",
   "description": "",
   "scripts": {
@@ -7,13 +7,22 @@
     "watch": "tsc -w",
     "prestart": "npm run build",
     "start": "func start",
-    "test": "echo \"No tests yet...\""
+    "test": "echo \"No tests yet...\"",
+    "deploy:stage": "func azure functionapp publish fa-import-service-ne-574 --slot staging",
+    "deploy:prod": "az functionapp deployment slot swap --name \"fa-import-service-ne-574\" --resource-group \"rg-import-service-sand-ne-574\" --slot staging --target-slot production",
+    "deploy": "npm run build && npm run deploy:stage && npm run deploy:prod"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@azure/app-configuration": "^1.5.0",
+    "class-validator": "^0.14.0",
+    "dotenv": "^16.3.1",
+    "inversify": "^6.0.1",
+    "reflect-metadata": "^0.1.13"
+  },
   "devDependencies": {
     "@azure/functions": "^3.0.0",
-    "azure-functions-core-tools": "^4.x",
     "@types/node": "18.x",
+    "azure-functions-core-tools": "^4.x",
     "typescript": "^4.0.0"
   }
 }
