@@ -1,11 +1,16 @@
 import { Context } from "@azure/functions";
+import { ServiceBusClient } from "@azure/service-bus";
+import { BlobSASPermissions, BlobServiceClient } from "@azure/storage-blob";
 import { injectable } from "inversify";
 
 import { makeHandler } from "../common/inversify/make-handler";
 import { BaseHandler } from "../common/handlers/base.handler";
 import { Logger } from "../common/logger/logger";
-import { BlobSASPermissions, BlobServiceClient } from "@azure/storage-blob";
-import { PARSED_CONTAINER_NAME, UPLOAD_CONTAINER_NAME } from "../constants";
+import {
+  PARSED_CONTAINER_NAME,
+  SERVICE_BUS_QUEUE_NAME,
+  UPLOAD_CONTAINER_NAME,
+} from "../constants";
 
 require("dotenv").config();
 
@@ -17,35 +22,47 @@ export class BlobImportProductsFromFile extends BaseHandler {
   }
 
   async executeFunction(context: Context, blob: Buffer): Promise<void> {
+    this.logger.info("Processing BlobImportProductsFromFile request!");
+
+    const blobString = blob.toString();
+    const linesDelimiter = blobString.includes("\r\n") ? "\r\n" : "\n";
+
+    const productsStrings = blobString.split(linesDelimiter);
+
+    const products = productsStrings.map((productsString) => {
+      const [title, description, price, count] = productsString.split(",");
+      return {
+        title: title.trim(),
+        description: description.trim(),
+        price: Number(price.trim()),
+        count: Number(count.trim()),
+      };
+    });
+
+    const serviceBusConnectionString = process.env.ServiceBusConnectionString;
+
+    const serviceBusClient = new ServiceBusClient(serviceBusConnectionString);
+    const sender = serviceBusClient.createSender(SERVICE_BUS_QUEUE_NAME);
+
+    const blobServiceClient = BlobServiceClient.fromConnectionString(
+      process.env.AzureWebJobsStorage
+    );
+    const sourceContainer = blobServiceClient.getContainerClient(
+      UPLOAD_CONTAINER_NAME
+    );
+    const destinationContainer = blobServiceClient.getContainerClient(
+      PARSED_CONTAINER_NAME
+    );
+
+    const sourceBlob = sourceContainer.getBlockBlobClient(
+      context.bindingData.name
+    );
+    const destinationBlob = destinationContainer.getBlockBlobClient(
+      sourceBlob.name
+    );
+
     try {
-      this.logger.info("Processing BlobImportProductsFromFile request!");
-
-      this.logger.info(
-        "Blob trigger function processed blob \n Name:",
-        context.bindingData.name,
-        "\n Blob Size:",
-        blob.length,
-        "Bytes"
-      );
-
-      this.logger.info("---blob data", blob.toString());
-
-      const blobServiceClient = BlobServiceClient.fromConnectionString(
-        process.env.AzureWebJobsStorage
-      );
-      const sourceContainer = blobServiceClient.getContainerClient(
-        UPLOAD_CONTAINER_NAME
-      );
-      const destinationContainer = blobServiceClient.getContainerClient(
-        PARSED_CONTAINER_NAME
-      );
-
-      const sourceBlob = sourceContainer.getBlockBlobClient(
-        context.bindingData.name
-      );
-      const destinationBlob = destinationContainer.getBlockBlobClient(
-        sourceBlob.name
-      );
+      await sender.sendMessages({ body: JSON.stringify(products) });
 
       const response = await destinationBlob.beginCopyFromURL(sourceBlob.url);
       await response.pollUntilDone();
@@ -62,7 +79,11 @@ export class BlobImportProductsFromFile extends BaseHandler {
       this.logger.error(e);
       context.res = {
         status: 500,
+        body: `${e.message}`,
       };
+    } finally {
+      await sender.close();
+      await serviceBusClient.close();
     }
   }
 }
