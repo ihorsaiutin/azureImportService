@@ -8,7 +8,8 @@ import { BaseHandler } from "../common/handlers/base.handler";
 import { Logger } from "../common/logger/logger";
 import {
   PARSED_CONTAINER_NAME,
-  SERVICE_BUS_QUEUE_NAME,
+  SERVICE_BUS_ITEM_TYPE,
+  SERVICE_BUS_TOPIC_NAME,
   UPLOAD_CONTAINER_NAME,
 } from "../constants";
 
@@ -42,7 +43,7 @@ export class BlobImportProductsFromFile extends BaseHandler {
     const serviceBusConnectionString = process.env.ServiceBusConnectionString;
 
     const serviceBusClient = new ServiceBusClient(serviceBusConnectionString);
-    const sender = serviceBusClient.createSender(SERVICE_BUS_QUEUE_NAME);
+    const sender = serviceBusClient.createSender(SERVICE_BUS_TOPIC_NAME);
 
     const blobServiceClient = BlobServiceClient.fromConnectionString(
       process.env.AzureWebJobsStorage
@@ -62,7 +63,12 @@ export class BlobImportProductsFromFile extends BaseHandler {
     );
 
     try {
-      await sender.sendMessages({ body: JSON.stringify(products) });
+      await sender.sendMessages({
+        body: JSON.stringify(products),
+        applicationProperties: {
+          type: SERVICE_BUS_ITEM_TYPE.PRODUCTS,
+        },
+      });
 
       const response = await destinationBlob.beginCopyFromURL(sourceBlob.url);
       await response.pollUntilDone();
